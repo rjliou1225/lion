@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hami Point x 雄獅旅遊 - 點數遊世界</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        /* 轉盤動畫相關 */
+        .wheel-container {
+            transition: transform 3s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+        
+        /* 隱藏捲軸但保持滑動 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* 優惠券撕裂線效果 */
+        .coupon-tear {
+            position: relative;
+        }
+        .coupon-tear::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            background-color: #fff;
+            border-radius: 50%;
+        }
+        .coupon-tear::after {
+            content: '';
+            position: absolute;
+            right: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            background-color: #fff;
+            border-radius: 50%;
+        }
+
+        /* 解鎖效果 CSS */
+        .step-lock-overlay {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- Icons (SVG Components) ---
+        
+        const IconGift = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <rect x="3" y="8" width="18" height="4" rx="1" />
+                <path d="M12 8v13" />
+                <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
+                <path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5" />
+            </svg>
+        );
+
+        const IconShield = ({ className, fill }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={fill || "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+            </svg>
+        );
+
+        const IconCrown = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14" />
+            </svg>
+        );
+
+        const IconChevronRight = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <path d="m9 18 6-6-6-6" />
+            </svg>
+        );
+
+        const IconPhone = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+            </svg>
+        );
+
+        const IconX = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+            </svg>
+        );
+
+        const IconLock = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+        );
+
+        const IconCheck = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <path d="M20 6 9 17l-5-5"/>
+            </svg>
+        );
+
+        const IconGlobe = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                <path d="M2 12h20"/>
+            </svg>
+        );
+
+        // --- Main Application ---
+
+        const PRIZES = [
+            { id: 1, name: "雄獅旅遊金 $10,000", color: "#ef4444", text: "#fff" }, // 紅
+            { id: 2, name: "Hami Point 100點", color: "#fff", text: "#ef4444" },
+            { id: 3, name: "訂房 $500 折價券", color: "#fca5a5", text: "#fff" }, // 淺紅
+            { id: 4, name: "漫遊上網 9折券", color: "#fff", text: "#ef4444" },
+            { id: 5, name: "銘謝惠顧", color: "#fee2e2", text: "#ef4444" },
+            { id: 6, name: "韓國一日遊 88折", color: "#fff", text: "#ef4444" },
+        ];
+
+        // 模態框組件 (Modal)
+        const Modal = ({ isOpen, onClose, children }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 animate-fade-in">
+                    <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl transform transition-all scale-100">
+                        <div className="p-2 flex justify-end">
+                            <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100">
+                                <IconX className="w-6 h-6 text-gray-500" />
+                            </button>
+                        </div>
+                        {children}
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [isSpinning, setIsSpinning] = useState(false);
+            const [rotation, setRotation] = useState(0);
+            const [showPrizeModal, setShowPrizeModal] = useState(false);
+            const [wonPrize, setWonPrize] = useState(null);
+
+            // 轉盤邏輯
+            const handleSpin = () => {
+                if (isSpinning) return;
+                setIsSpinning(true);
+                
+                // 隨機決定獎項
+                const targetIndex = 2; // 訂房 500元券
+                const segmentAngle = 360 / PRIZES.length;
+                
+                // 計算旋轉角度
+                const randomOffset = Math.random() * 20 - 10;
+                const targetRotation = 360 * 5 + (360 - (targetIndex * segmentAngle)) - (segmentAngle/2) + randomOffset;
+                
+                setRotation(targetRotation);
+
+                setTimeout(() => {
+                    setIsSpinning(false);
+                    setWonPrize(PRIZES[targetIndex]);
+                    setShowPrizeModal(true);
+                }, 3000);
+            };
+
+            return (
+                <div className="max-w-md mx-auto bg-gray-50 min-h-screen pb-24 shadow-xl relative overflow-hidden font-sans">
+                    
+                    {/* --- Header / Nav --- */}
+                    <div className="bg-white px-4 py-3 flex items-center justify-between sticky top-0 z-40 shadow-sm">
+                        <div className="flex items-center gap-2">
+                            <div className="font-black text-emerald-600 italic text-xl tracking-tighter">Hami Point</div>
+                            <span className="text-gray-300">|</span>
+                            <div className="font-bold text-red-600 text-lg">LION 雄獅旅遊</div>
+                        </div>
+                        <div className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                            Points: 12,580
+                        </div>
+                    </div>
+
+                    {/* --- 1. Hero Section --- */}
+                    <div className="relative h-[320px] overflow-hidden group">
+                        <img 
+                            src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?q=80&w=800&auto=format&fit=crop" 
+                            alt="Travel" 
+                            className="w-full h-full object-cover transition-transform duration-[10s] group-hover:scale-110"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent flex flex-col justify-end p-6">
+                            <div className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded w-fit mb-3 shadow-lg">
+                                點數放大術 🚀
+                            </div>
+                            <h1 className="text-3xl font-black text-white leading-tight mb-2 drop-shadow-md">
+                                Hami Point 帶你飛！<br/>
+                                <span className="text-yellow-400">點數放大，旅費激省</span>
+                            </h1>
+                            <p className="text-white/90 text-sm mb-6 font-medium">Hami Point 1 點 &gt; 1 元，辦漫遊再送旅遊金！</p>
+                            
+                            {/* Hero CTA Button */}
+                            <button className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-full shadow-lg shadow-red-900/50 active:scale-95 transition-all flex items-center justify-center gap-2 animate-bounce-slow">
+                                立即登入抽機票 <IconChevronRight className="w-5 h-5" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* --- 2. 流量鉤子 (天天轉運站) --- */}
+                    <div className="bg-gradient-to-b from-emerald-600 to-emerald-500 py-10 px-4 relative overflow-hidden">
+                        {/* 裝飾光暈 */}
+                        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white/10 to-transparent pointer-events-none"></div>
+
+                        <div className="text-center mb-8 relative z-10">
+                            <div className="inline-block bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-white text-xs font-bold mb-2">Gamification</div>
+                            <h2 className="text-3xl font-black text-white drop-shadow-md mb-1">天天轉運站</h2>
+                            <p className="text-emerald-100 font-medium">天天來簽到，天天賺旅費</p>
+                        </div>
+
+                        {/* 轉盤本體 */}
+                        <div className="relative w-72 h-72 mx-auto">
+                            {/* 指針 */}
+                            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 z-20 w-10 h-12 filter drop-shadow-lg">
+                                <div className="w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[24px] border-t-yellow-400"></div>
+                            </div>
+                            
+                            {/* 圓盤 */}
+                            <div 
+                                className="w-full h-full rounded-full border-[6px] border-yellow-400 bg-white shadow-2xl relative overflow-hidden wheel-container"
+                                style={{ transform: `rotate(${rotation}deg)` }}
+                            >
+                                {PRIZES.map((prize, index) => {
+                                    const rotate = index * (360 / PRIZES.length);
+                                    return (
+                                        <div 
+                                            key={prize.id}
+                                            className="absolute w-full h-full top-0 left-0 text-center pt-2 origin-bottom-center"
+                                            style={{ 
+                                                transform: `rotate(${rotate}deg)`,
+                                                clipPath: 'polygon(0 0, 100% 0, 50% 50%)' 
+                                            }}
+                                        >
+                                           <div className="absolute top-0 left-0 w-full h-1/2 origin-bottom bg-transparent flex justify-center pt-4"
+                                                style={{ transform: `rotate(${360/PRIZES.length/2}deg)` }}
+                                           >
+                                                <span 
+                                                    className="text-xs font-bold writing-vertical-rl transform rotate-180"
+                                                    style={{ color: index % 2 === 0 ? '#ef4444' : '#059669' }}
+                                                >
+                                                    {prize.name}
+                                                </span>
+                                           </div>
+                                        </div>
+                                    );
+                                })}
+                                {/* 簡易扇形背景 */}
+                                <div className="w-full h-full rounded-full" style={{
+                                    background: `conic-gradient(
+                                        #fff 0deg 60deg, 
+                                        #fee2e2 60deg 120deg, 
+                                        #fff 120deg 180deg, 
+                                        #fee2e2 180deg 240deg, 
+                                        #fff 240deg 300deg, 
+                                        #fee2e2 300deg 360deg
+                                    )`
+                                }}></div>
+                            </div>
+
+                            {/* 中心按鈕 */}
+                            <button 
+                                onClick={handleSpin}
+                                disabled={isSpinning}
+                                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-red-600 rounded-full border-[6px] border-white shadow-xl flex flex-col items-center justify-center text-white font-bold active:scale-95 transition-transform z-30 group"
+                            >
+                                <span className="text-xl leading-none">GO</span>
+                                <span className="text-[10px] opacity-80 group-hover:opacity-100">立即轉</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* --- 3. 核心變現 (週三雄獅日) --- */}
+                    <div className="py-10 px-4 bg-white">
+                        <div className="flex items-center justify-between mb-5">
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-800">週三會員日</h2>
+                                <p className="text-sm text-gray-500 font-medium">每週三限定，點數放大術 1.2倍</p>
+                            </div>
+                            <div className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-lg text-xs font-bold animate-pulse">
+                                限時限量
+                            </div>
+                        </div>
+
+                        <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
+                            {/* Deal Card 1: 桃園機場貴賓室 */}
+                            <div className="min-w-[180px] bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-lg shadow-gray-100 flex flex-col">
+                                <div className="h-28 bg-gray-100 relative">
+                                    <img src="https://images.unsplash.com/photo-1596489397635-c045b4676104?q=80&w=400&auto=format&fit=crop" className="w-full h-full object-cover" />
+                                    <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-full">
+                                        爆品
+                                    </div>
+                                </div>
+                                <div className="p-4 flex-1 flex flex-col">
+                                    <h3 className="font-bold text-gray-800 mb-2">桃園機場貴賓室</h3>
+                                    <div className="mt-auto">
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="text-2xl font-black text-emerald-600">299</span>
+                                            <span className="text-xs text-gray-500 font-bold">點</span>
+                                        </div>
+                                        <div className="text-xs text-gray-400 line-through">市價 $1,000</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Deal Card 2: Global Lounge */}
+                            <div className="min-w-[180px] bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-lg shadow-gray-100 flex flex-col">
+                                <div className="h-28 bg-gray-100 relative">
+                                    <img src="https://images.unsplash.com/photo-1620999557262-42173f478a87?q=80&w=400&auto=format&fit=crop" className="w-full h-full object-cover" />
+                                    <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-full">
+                                        殺很大
+                                    </div>
+                                </div>
+                                <div className="p-4 flex-1 flex flex-col">
+                                    <h3 className="font-bold text-gray-800 mb-2">全球機場貴賓室</h3>
+                                    <div className="mt-auto">
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="text-2xl font-black text-emerald-600">500</span>
+                                            <span className="text-xs text-gray-500 font-bold">點</span>
+                                        </div>
+                                        <div className="text-xs text-gray-400 line-through">市價 $1,100</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* More Card */}
+                            <div className="min-w-[100px] flex items-center justify-center">
+                                <button className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:bg-gray-200 transition-colors">
+                                    <IconChevronRight className="w-6 h-6" />
+                                </button>
+                            </div>
+                        </div>
+                        
+                        {/* Section CTA */}
+                        <button className="w-full mt-6 bg-emerald-600/10 text-emerald-700 font-bold py-3 rounded-xl hover:bg-emerald-600/20 transition-colors flex items-center justify-center gap-2">
+                            點數換好康 <IconChevronRight className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    {/* --- 4. 剛需攔截 (Bundling: Roaming/Insurance -> Service) --- */}
+                    <div className="py-10 px-4 bg-blue-50 relative overflow-hidden">
+                        {/* 裝飾背景 */}
+                        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-blue-100/50 rounded-full blur-3xl pointer-events-none"></div>
+
+                        <div className="relative z-10">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                                出國上網找中華<br/>吃喝玩樂找雄獅
+                            </h2>
+                            <p className="text-sm text-gray-600 mb-6 font-medium">
+                                申辦漫遊/投保，<span className="text-blue-600 font-bold">解鎖</span> 當地票券買一送一
+                            </p>
+
+                            {/* Step Flow Card */}
+                            <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-blue-100">
+                                
+                                {/* Step 1: Action */}
+                                <div className="p-5 border-b border-gray-100 relative">
+                                    <div className="absolute top-5 right-5 text-gray-200">
+                                        <IconGlobe className="w-12 h-12 opacity-20" />
+                                    </div>
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">1</div>
+                                        <h3 className="font-bold text-gray-800">申辦中華電信漫遊</h3>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mb-4 pl-11">包含：日本/韓國/東南亞/長程線</p>
+                                    <button className="ml-11 bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                                        查漫遊方案
+                                    </button>
+                                </div>
+
+                                {/* Step 2: Reward (Locked Visual) */}
+                                <div className="p-5 bg-gray-50 relative">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="w-8 h-8 rounded-full bg-gray-300 text-white flex items-center justify-center font-bold text-sm">2</div>
+                                        <h3 className="font-bold text-gray-500">解鎖雄獅優惠</h3>
+                                    </div>
+                                    
+                                    {/* Unlocked Content Preview (Blurred) */}
+                                    <div className="pl-11 opacity-60 filter blur-[1px]">
+                                        <div className="flex items-center gap-3 bg-white p-3 rounded-lg border border-gray-200">
+                                            <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center text-red-600">
+                                                <IconGift className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <div className="font-bold text-sm text-gray-800">當地票券買一送一</div>
+                                                <div className="text-[10px] text-gray-500">含 JR Pass / 迪士尼門票</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Lock Overlay */}
+                                    <div className="absolute inset-0 step-lock-overlay flex flex-col items-center justify-center text-center">
+                                        <div className="w-12 h-12 bg-gray-800 text-white rounded-full flex items-center justify-center mb-2 shadow-lg">
+                                            <IconLock className="w-5 h-5" />
+                                        </div>
+                                        <div className="bg-gray-800 text-white text-[10px] font-bold px-3 py-1 rounded-full">
+                                            完成 Step 1 解鎖
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* --- 5. 尊榮專區 (VIP) --- */}
+                    <div className="bg-slate-900 py-12 px-5 text-white relative overflow-hidden">
+                        {/* 金色質感背景 */}
+                        <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900"></div>
+                        <div className="absolute -top-10 -right-10 w-40 h-40 bg-yellow-500/10 rounded-full blur-3xl"></div>
+
+                        <div className="relative z-10">
+                            <div className="flex items-center gap-2 mb-6">
+                                <IconCrown className="w-6 h-6 text-yellow-400" />
+                                <div>
+                                    <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 to-yellow-500">
+                                        VIP 專屬，極致尊寵
+                                    </h2>
+                                    <p className="text-[10px] text-yellow-500/80 tracking-wider">EXCLUSIVE PRIVILEGES</p>
+                                </div>
+                            </div>
+                            
+                            <div className="grid gap-4">
+                                {/* Card 1 */}
+                                <div className="bg-white/5 backdrop-blur-md rounded-xl p-4 border border-white/10 flex items-start gap-4 hover:bg-white/10 transition-colors">
+                                    <div className="mt-1 w-8 h-8 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-slate-900 font-bold shadow-lg">
+                                        <IconCheck className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-yellow-100 text-sm">權益互通 (Status Match)</h3>
+                                        <p className="text-xs text-gray-400 mt-1 leading-relaxed">中華 VIP 直升雄獅 O/N 卡，享生日禮金與專屬秘書。</p>
+                                    </div>
+                                </div>
+
+                                {/* Card 2 */}
+                                <div className="bg-white/5 backdrop-blur-md rounded-xl p-4 border border-white/10 flex items-start gap-4 hover:bg-white/10 transition-colors">
+                                    <div className="mt-1 w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-yellow-400 border border-yellow-500/30">
+                                        <IconPhone className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-yellow-100 text-sm">機場禮遇</h3>
+                                        <p className="text-xs text-gray-400 mt-1 leading-relaxed">預約專屬報到櫃檯，免排隊快速通關。</p>
+                                        <button className="mt-2 text-[10px] text-yellow-400 underline">預約專屬櫃檯</button>
+                                    </div>
+                                </div>
+                                
+                                {/* Card 3 */}
+                                <div className="bg-white/5 backdrop-blur-md rounded-xl p-4 border border-white/10 flex items-start gap-4 hover:bg-white/10 transition-colors">
+                                    <div className="mt-1 w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-yellow-400 border border-yellow-500/30">
+                                        <IconGlobe className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-yellow-100 text-sm">隱藏行程</h3>
+                                        <p className="text-xs text-gray-400 mt-1 leading-relaxed">僅限黑卡查看的特殊團 (建築大師、米其林團)。</p>
+                                        <button className="mt-2 text-[10px] text-yellow-400 underline">查看黑卡限定團</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* --- Footer Spacing --- */}
+                    <div className="h-24"></div>
+
+                    {/* --- 6. Sticky Footer (Conversion) --- */}
+                    <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 p-4 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] z-50 max-w-md mx-auto">
+                        <div className="flex gap-3">
+                            <button className="flex-1 py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors">
+                                <IconGift className="w-4 h-4" />
+                                我的優惠券夾
+                            </button>
+                            <button className="flex-[1.5] py-3.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-red-200 active:scale-[0.98] transition-all flex items-center justify-center gap-1">
+                                前往雄獅旅遊訂房
+                                <IconChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* --- Modal Content: 抽獎結果 --- */}
+                    <Modal isOpen={showPrizeModal} onClose={() => setShowPrizeModal(false)}>
+                        <div className="p-6 text-center">
+                            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+                                <IconGift className="w-10 h-10 text-red-600" />
+                            </div>
+                            <h3 className="text-2xl font-black text-gray-800 mb-2">恭喜中獎！</h3>
+                            <p className="text-gray-500 text-sm mb-6">您獲得了專屬旅遊金：</p>
+                            
+                            {wonPrize && (
+                                <div className="bg-gradient-to-r from-red-50 to-red-100 border-2 border-dashed border-red-200 rounded-xl p-5 mb-8 relative coupon-tear shadow-sm">
+                                    <div className="text-red-600 font-black text-xl">{wonPrize.name}</div>
+                                    <div className="text-red-400 text-xs mt-2 font-medium bg-white/50 inline-block px-2 py-1 rounded">使用期限：2024/12/31</div>
+                                </div>
+                            )}
+
+                            <button 
+                                onClick={() => {
+                                    alert("正在導轉至雄獅旅遊 App (帶有 UTM 參數)...");
+                                    setShowPrizeModal(false);
+                                }}
+                                className="w-full bg-red-600 text-white font-bold py-4 rounded-xl shadow-xl shadow-red-200 hover:bg-red-700 transition-all text-lg flex items-center justify-center gap-2"
+                            >
+                                立即去雄獅使用 <IconChevronRight className="w-5 h-5" />
+                            </button>
+                        </div>
+                    </Modal>
+
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
